@@ -17,6 +17,9 @@
 
 namespace leveldb {
 
+
+// DataBlock/MetaIndexBlock/IndexBlock 的物理结构相同，都是BlockBuilder构建的
+// MetaBlock 的物理结构比较特殊，是FilterBlockBuilder 构建的
 struct TableBuilder::Rep {
   Options options;
   Options index_block_options;
@@ -39,6 +42,9 @@ struct TableBuilder::Rep {
   // blocks.
   //
   // Invariant: r->pending_index_entry is true only if data_block is empty.
+  // 当 flush 掉一个 DataBlock 后，不会立即生成他的 indexBlock entry，而是等到下一个
+  // block 的第一个 key 来的时候生成一个最短的 indexKey 使得这个 indexKey>=“该 block 的所有 key”
+  // 而且 indexKey<“下一个 block 的所有 key”
   bool pending_index_entry;
   BlockHandle pending_handle;  // Handle to add to index block
 
@@ -97,8 +103,10 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
 
+  //处理上一个 DataBlock 的 index entry
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
+    // 改变 last_key 为属于[last_key,key)的最小、短的 key
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
@@ -115,11 +123,13 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   r->data_block.Add(key, value);
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
+  // 如果当前 block 大小达到了阈值，则将这个 block flush 到文件中。
   if (estimated_block_size >= r->options.block_size) {
     Flush();
   }
 }
 
+// Flush 当前 block 到文件中，然后生成一个新的 block
 void TableBuilder::Flush() {
   Rep* r = rep_;
   assert(!r->closed);
@@ -136,6 +146,8 @@ void TableBuilder::Flush() {
   }
 }
 
+//将BlockBuilder 生成的数据压缩，
+//然后 append 这个 block 到文件
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
@@ -198,6 +210,7 @@ Status TableBuilder::status() const {
 
 Status TableBuilder::Finish() {
   Rep* r = rep_;
+  // 1,flush 最后一个 DataBlock 到文件
   Flush();
   assert(!r->closed);
   r->closed = true;
@@ -205,12 +218,14 @@ Status TableBuilder::Finish() {
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
   // Write filter block
+  // 2,写 MetaBlock（这里只有 FilterBlock，且只有一个），Meta Block的物理结构也与其他Block有所不同
   if (ok() && r->filter_block != nullptr) {
     WriteRawBlock(r->filter_block->Finish(), kNoCompression,
                   &filter_block_handle);
   }
 
   // Write metaindex block
+  // 3,写 MetaIndex Block，这里 Entry 的 key 是“filter 的名称”，value是“filter的 BlockHandle”
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
     if (r->filter_block != nullptr) {
@@ -227,6 +242,8 @@ Status TableBuilder::Finish() {
   }
 
   // Write index block
+  // 4,填充最后一个Index Block Entry，key 是“表中所有Data entry 的key 的值的最大可能值”。
+  // 写 index_block
   if (ok()) {
     if (r->pending_index_entry) {
       r->options.comparator->FindShortSuccessor(&r->last_key);

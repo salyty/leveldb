@@ -48,7 +48,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
   if (input.size() < kHeader) {
     return Status::Corruption("malformed WriteBatch (too small)");
   }
-
+  //移除sequence 和 count
   input.remove_prefix(kHeader);
   Slice key, value;
   int found = 0;

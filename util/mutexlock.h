@@ -12,7 +12,9 @@ namespace leveldb {
 
 // Helper class that locks a mutex on construction and unlocks the mutex when
 // the destructor of the MutexLock object is invoked.
-//
+// 构造的时候 Lock，析构的时候 UnLock，因此如果想在一个函数执行的过程中加锁，只需要在一开始
+// 的时候构造就行了，离开函数了它就自动解锁了
+
 // Typical usage:
 //
 //   void MyClass::MyMethod() {

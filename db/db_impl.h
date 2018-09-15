@@ -69,6 +69,7 @@ class DBImpl : public DB {
   struct CompactionState;
   struct Writer;
 
+  // 返回迭代器，可以遍历 Memtable， Immutable Memtable, 和 current version 的所有 SST
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot,
                                 uint32_t* seed);
@@ -76,7 +77,7 @@ class DBImpl : public DB {
   Status NewDB();
 
   // Recover the descriptor from persistent storage.  May do a significant
-  // amount of work to recover recently logged updates.  Any changes to
+  // amount of work to recover recently logged(log 文件) updates.  Any changes to
   // be made to the descriptor are added to *edit.
   Status Recover(VersionEdit* edit, bool* save_manifest)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -95,11 +96,14 @@ class DBImpl : public DB {
                         VersionEdit* edit, SequenceNumber* max_sequence)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  // 不一定是写到 level0
   Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  // 如果 mem_ 还有空间的话直接返回，否则等待后台完成 compaction
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // 合并多个writers_ 的 batch，并从last_writer返回最后一个被合并的 writer
   WriteBatch* BuildBatchGroup(Writer** last_writer)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -111,11 +115,15 @@ class DBImpl : public DB {
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // 执行压缩，包含 Memtable 向 level[0] 压缩和 level[i] 向 level[i+1] 压缩
   Status DoCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  // 打开压缩输出文件（将作为 level+1的文件），同时创建 TableBuilder
   Status OpenCompactionOutputFile(CompactionState* compact);
+  // 将生成的 SST Sync 到磁盘
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
+  // 标记压缩原文件为删除，新文件为新增，并生成新的 manifest 文件
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -139,7 +147,7 @@ class DBImpl : public DB {
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;
-  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
+  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted, 即 Immutable MemTable
   port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
   WritableFile* logfile_;
   uint64_t logfile_number_ GUARDED_BY(mutex_);
@@ -148,7 +156,7 @@ class DBImpl : public DB {
 
   // Queue of writers.
   std::deque<Writer*> writers_ GUARDED_BY(mutex_);
-  WriteBatch* tmp_batch_ GUARDED_BY(mutex_);
+  WriteBatch* tmp_batch_ GUARDED_BY(mutex_); //可以将writers_中的前一部分 batch 合并，
 
   SnapshotList snapshots_ GUARDED_BY(mutex_);
 
@@ -189,6 +197,7 @@ class DBImpl : public DB {
       this->bytes_written += c.bytes_written;
     }
   };
+  // 压缩过程中的读写大小、耗时统计信息
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
 
   // No copying allowed

@@ -30,6 +30,9 @@ class Writer {
 
   ~Writer();
 
+  // 将 slice 拆分为多条 record（如必要）append 到dest_后面。
+  // 保证Block的开始位置一定是一个新的Record
+  // 单个Block中包含多个Record
   Status AddRecord(const Slice& slice);
 
  private:

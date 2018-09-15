@@ -52,6 +52,7 @@ TEST(FilterBlockTest, EmptyBuilder) {
   ASSERT_TRUE(reader.KeyMayMatch(100000, "foo"));
 }
 
+//只创建一个 filter
 TEST(FilterBlockTest, SingleChunk) {
   FilterBlockBuilder builder(&policy_);
   builder.StartBlock(100);
@@ -73,6 +74,7 @@ TEST(FilterBlockTest, SingleChunk) {
   ASSERT_TRUE(! reader.KeyMayMatch(100, "other"));
 }
 
+//创建多个filter
 TEST(FilterBlockTest, MultiChunk) {
   FilterBlockBuilder builder(&policy_);
 

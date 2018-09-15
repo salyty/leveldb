@@ -42,6 +42,7 @@ TableCache::~TableCache() {
   delete cache_;
 }
 
+//从 Cache 获取 table，没有的话从文件读取，再塞进cache
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
@@ -94,6 +95,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
 
   Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+  //获取IndexBlock 和 DataBlock 的 TwoLevelIterator，
   Iterator* result = table->NewIterator(options);
   result->RegisterCleanup(&UnrefEntry, cache_, handle);
   if (tableptr != nullptr) {

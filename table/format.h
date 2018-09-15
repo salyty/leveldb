@@ -36,7 +36,7 @@ class BlockHandle {
 
   // Maximum encoding length of a BlockHandle
   enum { kMaxEncodedLength = 10 + 10 };
-
+//  一个 Block 块的偏移量和大小
  private:
   uint64_t offset_;
   uint64_t size_;
@@ -86,6 +86,7 @@ static const size_t kBlockTrailerSize = 5;
 struct BlockContents {
   Slice data;           // Actual contents of data
   bool cachable;        // True iff data can be cached
+  // 如果是data 是 new 出来的，则调用方需要负责释放 data 的内存。
   bool heap_allocated;  // True iff caller should delete[] data.data()
 };
 

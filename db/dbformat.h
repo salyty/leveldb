@@ -185,12 +185,17 @@ class LookupKey {
   ~LookupKey();
 
   // Return a key suitable for lookup in a MemTable.
+  // {klength}{userkey}{tag}， tag 包含 sequence num 和 type，实际上 type 没有必要，
+  // 因为一次批量操作里面一个 userkey 只会有一个sequence num 。所以同一个 userkey 肯定会
+  // 有不同的sequence num，在userkey一样的情况下，只需要再比较sequence num就行了。
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)
+  // {userkey}{tag}
   Slice internal_key() const { return Slice(kstart_, end_ - kstart_); }
 
   // Return the user key
+  // {userkey}
   Slice user_key() const { return Slice(kstart_, end_ - kstart_ - 8); }
 
  private:

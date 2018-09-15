@@ -49,17 +49,27 @@ int FindFile(const InternalKeyComparator& icmp,
 // largest==nullptr represents a key largest than all keys in the DB.
 // REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
 //           in sorted order.
+// disjoint_sorted_files:文件之间没有交集
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            bool disjoint_sorted_files,
                            const std::vector<FileMetaData*>& files,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
+//
+/*
+ * 记录某个版本的所有SSTable文件信息（leveldb::FileMetaData）、
+ * 该版本引用数量、待压缩文件及其level，包括文件号、文件大小、最大最小key等。
+ * 因此，当给定 key 的时候，很容易就能查出 key 是否在哪个文件里面。
+ * 当给定 key  range 的时候，很容易就能算出哪些文件和key  range有交集，
+ * 这在压缩（Compaction）的时候很有用。由于 SST 生成以后就是不可变的，
+ * 可以认为，version 就代表了某个时刻的SST 的 snapshot。*/
 class Version {
  public:
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
+  // iters 可以用来遍历该版本所有level 的内容
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
@@ -69,6 +79,8 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
+  // 从 SST 找，从 level0开始往高 level找，找到了就返回，不管更高 level 的。因为低
+  // level 的数据更新。如果整个过程读取了超过一次Table，则在 stats 中记录下来第一次读取的 Table
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
@@ -134,6 +146,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
+  // files[i]表示 level i 的文件列表（vector）。当前版本的信息
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
@@ -161,6 +174,12 @@ class Version {
   void operator=(const Version&);
 };
 
+/* VersionSet维护一个 Version 的循环链表，以及当前的 Version：current_。
+ * 当生成新的 Manifest 文件的时候，会根据当前的版本 current_ （当做base_）,
+ * 以及表示 version 变更情况的 VersionEdit 生成一个新的 Version：newVersion。
+ * 然后保存到新的 Manifest 文件，将 Current 文件指向这个新的 Manifest 文件。
+ * 并在内存中更新current_ = newVersion */
+// VersionSet的多数操作都是针对 current_ 的。
 class VersionSet {
  public:
   VersionSet(const std::string& dbname,
@@ -174,6 +193,7 @@ class VersionSet {
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
+  // 生成新的 Manifest 的文件和 Version
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
@@ -199,9 +219,11 @@ class VersionSet {
   }
 
   // Return the number of Table files at the specified level.
+  // 当然是当前 version
   int NumLevelFiles(int level) const;
 
   // Return the combined file size of all files at the specified level.
+  // 当然是当前 version
   int64_t NumLevelBytes(int level) const;
 
   // Return the last sequence number.
@@ -217,10 +239,14 @@ class VersionSet {
   void MarkFileNumberUsed(uint64_t number);
 
   // Return the current log file number.
+  // 当 db 启动的时候，需要读取该log_number_， 所有比该log_number_ 新（>=）的 log 文件都需要恢复
   uint64_t LogNumber() const { return log_number_; }
 
   // Return the log file number for the log file that is currently
   // being compacted, or zero if there is no such log file.
+  // Note that PrevLogNumber() is no longer used, but we pay
+  // attention to it in case we are recovering a database
+  // produced by an older version of leveldb.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
   // Pick level and inputs for a new compaction.
@@ -244,6 +270,7 @@ class VersionSet {
 
   // Create an iterator that reads over the compaction inputs for "*c".
   // The caller should delete the iterator when no longer needed.
+  // 创建迭代器，可以遍历 Compaction 中的所有输入文件（待压缩文件）
   Iterator* MakeInputIterator(Compaction* c);
 
   // Returns true iff some level needs a compaction.
@@ -275,6 +302,7 @@ class VersionSet {
 
   bool ReuseManifest(const std::string& dscname, const std::string& dscbase);
 
+  // 计算最需要压缩的 level 和压缩打分
   void Finalize(Version* v);
 
   void GetRange(const std::vector<FileMetaData*>& inputs,
@@ -286,9 +314,11 @@ class VersionSet {
                  InternalKey* smallest,
                  InternalKey* largest);
 
+  // 可能会扩大压缩文件的范围
   void SetupOtherInputs(Compaction* c);
 
   // Save current contents to *log
+  // 主要包含比较器名称、每个 level 下次轮到compaction的key、current_->files_（每个 level 的文件列表）、
   Status WriteSnapshot(log::Writer* log);
 
   void AppendVersion(Version* v);
@@ -300,18 +330,22 @@ class VersionSet {
   const InternalKeyComparator icmp_;
   uint64_t next_file_number_;
   uint64_t manifest_file_number_;
-  uint64_t last_sequence_;
+  uint64_t last_sequence_;  //写入key 的时候，SequenceNum 递增，对有同一个 tatch 写入，SequenceNum可能一样
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+
+  // 与Version::next_/prev_ 一起构成记录所有有效（还活着） version 的循环链表。头节点是虚拟节点，无数据。
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+  // 同层的文件轮流来compaction，比如这次是文件A进行compaction，那么下次就是在key range上
+  // 紧挨着文件A的文件B进行compaction，这样每个文件都会有机会轮流和高层的level 文件进行合并。
   std::string compact_pointer_[config::kNumLevels];
 
   // No copying allowed
@@ -373,6 +407,7 @@ class Compaction {
   VersionEdit edit_;
 
   // Each compaction reads inputs from "level_" and "level_+1"
+  // 两个 level 的待压缩的文件列表
   std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
 
   // State used to check for number of of overlapping grandparent files

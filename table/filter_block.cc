@@ -19,6 +19,7 @@ FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
     : policy_(policy) {
 }
 
+//block_offset: Data Block 在文件中的偏移量
 void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
   uint64_t filter_index = (block_offset / kFilterBase);
   assert(filter_index >= filter_offsets_.size());
@@ -57,6 +58,7 @@ void FilterBlockBuilder::GenerateFilter() {
     return;
   }
 
+  //创建一个新的 filter 追加到 result_后面，并在filter_offsets_中记录该 filter 在 result_中的偏移量
   // Make list of keys from flattened key structure
   start_.push_back(keys_.size());  // Simplify length computation
   tmp_keys_.resize(num_keys);
@@ -83,6 +85,7 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
       num_(0),
       base_lg_(0) {
   size_t n = contents.size();
+  //没有 filter 数据
   if (n < 5) return;  // 1 byte for base_lg_ and 4 for start of offset array
   base_lg_ = contents[n-1];
   uint32_t last_word = DecodeFixed32(contents.data() + n - 5);
@@ -92,6 +95,12 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
   num_ = (n - 5 - last_word) / 4;
 }
 
+//查看某个 key 是否在可能在某个 block 里面
+//先根据 block_offset 获取 filterIndex=DataBlockOffset/2KB, filterIndex也就是 offset of filter
+//再根据 filterIndex 获取 filterOffset
+//再根据 filterOffset 获取 filter 内容，
+//再看 key 是否匹配 filter
+//注意多个 block 可能属于同一个 filter
 bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
   uint64_t index = block_offset >> base_lg_;
   if (index < num_) {

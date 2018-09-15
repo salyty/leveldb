@@ -65,11 +65,12 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
   scratch->clear();
   record->clear();
+  // 是否读到一个logical record 的中间（已经读完了kFirstType）
   bool in_fragmented_record = false;
   // Record offset of the logical record that we're reading
   // 0 is a dummy value to make compilers happy
   uint64_t prospective_record_offset = 0;
-
+  // 物理 record
   Slice fragment;
   while (true) {
     const unsigned int record_type = ReadPhysicalRecord(&fragment);
@@ -77,6 +78,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
     // ReadPhysicalRecord may have only had an empty trailer remaining in its
     // internal buffer. Calculate the offset of the next physical record now
     // that it has returned, properly accounting for its header size.
+    // 这个fragment（物理record）的偏移量
     uint64_t physical_record_offset =
         end_of_buffer_offset_ - buffer_.size() - kHeaderSize - fragment.size();
 
@@ -118,6 +120,8 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
             ReportCorruption(scratch->size(), "partial record without end(2)");
           }
         }
+        // 暂存第一个physical_record的偏移量，成功读完最后一个physical_record后，作为该
+        // logical record 的偏移量
         prospective_record_offset = physical_record_offset;
         scratch->assign(fragment.data(), fragment.size());
         in_fragmented_record = true;
@@ -191,8 +195,11 @@ void Reader::ReportDrop(uint64_t bytes, const Status& reason) {
   }
 }
 
+// 包含对底层buffer_的操作，如果需要读入新的 block 数据，则读入新的 block 到 buffer_
+// 读取 record 后去除buffer_ 前面关于该 record 的内容
 unsigned int Reader::ReadPhysicalRecord(Slice* result) {
   while (true) {
+    // buffer_ 连 record 头部的大小都没有，说明没有 record
     if (buffer_.size() < kHeaderSize) {
       if (!eof_) {
         // Last read was a full read, so this is a trailer to skip
@@ -264,6 +271,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
     buffer_.remove_prefix(kHeaderSize + length);
 
     // Skip physical record that started before initial_offset_
+    // 上面已经 buffer_.remove_prefix(kHeaderSize + length)，所以还要减去kHeaderSize 和 length
     if (end_of_buffer_offset_ - buffer_.size() - kHeaderSize - length <
         initial_offset_) {
       result->clear();

@@ -10,7 +10,7 @@
 #include "util/coding.h"
 
 namespace leveldb {
-
+//    获取可变长度的 int32 数值表示的长度开头的后续字符串，不包含长度
 static Slice GetLengthPrefixedSlice(const char* data) {
   uint32_t len;
   const char* p = data;
@@ -97,30 +97,38 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   char* p = EncodeVarint32(buf, internal_key_size);
   memcpy(p, key.data(), key_size);
   p += key_size;
+  // internal_key= "key.data()" + "(s << 8) | type"
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
   p = EncodeVarint32(p, val_size);
   memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
+  // 把 kv 信息都 插入到 skiplist 的 key 里面去。但是只按 k 比较大小
   table_.Insert(buf);
 }
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
+  // Seek 方法根据 KeyComparator 比较，只根据 {klength}{userkey}{tag} 比较大小。
+  // 调用 skiplist_->FindGreaterOrEqual(memkey)
+  // 因此对于同一个 user_key,Seek 出来的是 SequenceNumber<=key.SequenceNumber，
+  // 即符合条件的版本最新的 kv
   iter.Seek(memkey.data());
   if (iter.Valid()) {
     // entry format is:
-    //    klength  varint32
+    //    klength  varint32， 即上面的 internal_key_size = key_size + 8
     //    userkey  char[klength]
-    //    tag      uint64
+    //    tag      uint64     即(SequenceNumber << 8) | type
     //    vlength  varint32
     //    value    char[vlength]
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
+    // Seek 方法忽略所有 sequence number 比key 里面的 sequence number 大的，因为那是更加新的数据。
     const char* entry = iter.key();
     uint32_t key_length;
+    // 为啥不是 entry, entry+4？不过entry+5是 limit，也没啥影响
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8),

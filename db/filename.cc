@@ -123,6 +123,8 @@ bool ParseFileName(const std::string& filename,
   return true;
 }
 
+// 先生成一个临时文件 tmp ，内容指向新的文件 descriptor_number
+// 然后将该 tmp 文件改名为 dbname + "/CURRENT"
 Status SetCurrentFile(Env* env, const std::string& dbname,
                       uint64_t descriptor_number) {
   // Remove leading "dbname/" and add newline to manifest file name

@@ -70,6 +70,9 @@ class MemTable {
   friend class MemTableIterator;
   friend class MemTableBackwardIterator;
 
+  // key 为 {klength}{userkey}{tag((SequenceNumber<< 8)|(type)}{vlength}{value} 格式
+  // KeyComparator 只取 {klength}{userkey}{tag((SequenceNumber<< 8)|(type)} 使用InternalKeyComparator比较
+  // 也就是按 user_key升序 - SequenceNumber降序 - tag降序 比较,同一个 user_key 的不同 SequenceNumber 的 entries 会在一起
   typedef SkipList<const char*, KeyComparator> Table;
 
   KeyComparator comparator_;

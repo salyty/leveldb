@@ -79,10 +79,12 @@ class Block::Iter : public Iterator {
   const char* const data_;      // underlying block contents
   uint32_t const restarts_;     // Offset of restart array (list of fixed32)
   uint32_t const num_restarts_; // Number of uint32_t entries in restart array
+  // 以上几个都是 Block 的属性，在迭代过程中不变，都是 const，
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
-  uint32_t current_;
-  uint32_t restart_index_;  // Index of restart block in which current_ falls
+  uint32_t current_;    //  当前 entry 在 data_里面的 offset
+  // Index of restart block in which current_ falls,
+  uint32_t restart_index_;  // 当前重启点的序号
   std::string key_;
   Slice value_;
   Status status_;
@@ -162,6 +164,7 @@ class Block::Iter : public Iterator {
     } while (ParseNextKey() && NextEntryOffset() < original);
   }
 
+  //寻找指定的 key
   virtual void Seek(const Slice& target) {
     // Binary search in restart array to find the last restart point
     // with a key < target
@@ -208,6 +211,7 @@ class Block::Iter : public Iterator {
   }
 
   virtual void SeekToLast() {
+    // 先跳到最后一个重启点，然后在这个重启点内跳到最后一条
     SeekToRestartPoint(num_restarts_ - 1);
     while (ParseNextKey() && NextEntryOffset() < restarts_) {
       // Keep skipping
@@ -241,7 +245,9 @@ class Block::Iter : public Iterator {
       CorruptionError();
       return false;
     } else {
+      // key 先缩短为与前一个 key 共同的部分
       key_.resize(shared);
+      // 再扩展上自己独有的部分，然后 key 就完整了
       key_.append(p, non_shared);
       value_ = Slice(p + non_shared, value_length);
       while (restart_index_ + 1 < num_restarts_ &&

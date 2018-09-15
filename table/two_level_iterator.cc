@@ -88,6 +88,8 @@ TwoLevelIterator::TwoLevelIterator(
 TwoLevelIterator::~TwoLevelIterator() {
 }
 
+//先使用index_iter_寻找 DataBlock，然后生成它的迭代器data_iter_，
+//再用data_iter_寻找 entry
 void TwoLevelIterator::Seek(const Slice& target) {
   index_iter_.Seek(target);
   InitDataBlock();
@@ -153,6 +155,7 @@ void TwoLevelIterator::SetDataIterator(Iterator* data_iter) {
   data_iter_.Set(data_iter);
 }
 
+// 根据data_block_handle_获取 DataBlock，然后生成它的迭代器data_iter_
 void TwoLevelIterator::InitDataBlock() {
   if (!index_iter_.Valid()) {
     SetDataIterator(nullptr);

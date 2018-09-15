@@ -50,6 +50,7 @@ class Reader {
   // "*scratch" as temporary storage.  The contents filled in *record
   // will only be valid until the next mutating operation on this
   // reader or the next mutation to *scratch.
+  // 读取一个 logical record
   bool ReadRecord(Slice* record, std::string* scratch);
 
   // Returns the physical offset of the last record returned by ReadRecord.
@@ -66,8 +67,10 @@ class Reader {
   bool eof_;   // Last Read() indicated EOF by returning < kBlockSize
 
   // Offset of the last record returned by ReadRecord.
+  // logical record（可能拆分为多个 physical record）
   uint64_t last_record_offset_;
   // Offset of the first location past the end of buffer_.
+  // 下一次读取数据到 buffer_时候，在文件中的偏移量
   uint64_t end_of_buffer_offset_;
 
   // Offset at which to start looking for the first record to return
@@ -95,6 +98,8 @@ class Reader {
   bool SkipToInitialBlock();
 
   // Return type, or one of the preceding special values
+  // 读取一条物理 record，不包含 header
+  // 一个 logical record 可能被拆分为多个kFirstType，kMiddleType，kLastType类型的 physical record，
   unsigned int ReadPhysicalRecord(Slice* result);
 
   // Reports dropped bytes to the reporter.

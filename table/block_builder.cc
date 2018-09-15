@@ -26,6 +26,9 @@
 //     num_restarts: uint32
 // restarts[i] contains the offset within the block of the ith restart point.
 
+// DataBlock/MetaIndexBlock/IndexBlock 的物理结构相同，都是BlockBuilder构建的
+// MetaBlock 的物理结构比较特殊，是FilterBlockBuilder 构建的
+
 #include "table/block_builder.h"
 
 #include <algorithm>
@@ -60,6 +63,7 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
           sizeof(uint32_t));                      // Restart array length
 }
 
+// 追加重启点队列和重启点数量到最后的 Record（Entry） 后面
 Slice BlockBuilder::Finish() {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
@@ -100,6 +104,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(value.data(), value.size());
 
   // Update state
+  // 其实就是更新last_key_ 为 key
   last_key_.resize(shared);
   last_key_.append(key.data() + shared, non_shared);
   assert(Slice(last_key_) == key);

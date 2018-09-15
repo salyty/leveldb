@@ -62,6 +62,7 @@ Status Footer::DecodeFrom(Slice* input) {
   return result;
 }
 
+//随机读一个 Block
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
@@ -109,6 +110,7 @@ Status ReadBlock(RandomAccessFile* file,
         result->cachable = false;  // Do not double-cache
       } else {
         result->data = Slice(buf, n);
+//        buf是 new 出来的内存，需要调用者负责释放内存
         result->heap_allocated = true;
         result->cachable = true;
       }

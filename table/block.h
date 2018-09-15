@@ -35,7 +35,7 @@ class Block {
   // No copying allowed
   Block(const Block&);
   void operator=(const Block&);
-
+  //用来对 block 内的 key 进行查找，并获取 value
   class Iter;
 };
 

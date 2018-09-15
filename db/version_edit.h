@@ -14,6 +14,7 @@ namespace leveldb {
 
 class VersionSet;
 
+// 文件的元信息并不包含 level, Version 里面有
 struct FileMetaData {
   int refs;
   int allowed_seeks;          // Seeks allowed until compaction
@@ -83,7 +84,7 @@ class VersionEdit {
 
  private:
   friend class VersionSet;
-
+  // level -> file num
   typedef std::set< std::pair<int, uint64_t> > DeletedFileSet;
 
   std::string comparator_;
@@ -96,9 +97,10 @@ class VersionEdit {
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
-
+  //level -> key
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
   DeletedFileSet deleted_files_;
+  //level -> file
   std::vector< std::pair<int, FileMetaData> > new_files_;
 };
 

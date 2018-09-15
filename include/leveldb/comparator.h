@@ -44,6 +44,8 @@ class LEVELDB_EXPORT Comparator {
   // If *start < limit, changes *start to a short string in [start,limit).
   // Simple comparator implementations may return with *start unchanged,
   // i.e., an implementation of this method that does nothing is correct.
+  // 如果 *start < limit，找到一个最短的 key，使得 key 属于[start,limit)。
+  // 可以用来做  DataBlock 的 key 的最大可能值。作为该DataBlock对应的 IndexBlock  entry的 key。
   virtual void FindShortestSeparator(
       std::string* start,
       const Slice& limit) const = 0;
@@ -51,6 +53,8 @@ class LEVELDB_EXPORT Comparator {
   // Changes *key to a short string >= *key.
   // Simple comparator implementations may return with *key unchanged,
   // i.e., an implementation of this method that does nothing is correct.
+  // 可以用来做最后一个 IndexBlockEntry的 key。表示表中所有Data entry 的key 的值的最大可能值。
+  // 因为没有下一个 DataBlock 了，所以参数只有最后一个 key，没有下一个 block 的第一个 key
   virtual void FindShortSuccessor(std::string* key) const = 0;
 };
 

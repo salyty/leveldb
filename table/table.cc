@@ -35,6 +35,16 @@ struct Table::Rep {
   Block* index_block;
 };
 
+/*可能需要4次随机读文件：
+ * 1，读取 Footer
+ * 2，读取 index_block
+ * 3，读取 mateIndexBlock（如果有）
+ * 4，读取 filterBlock（如果有）
+ *
+ * 所以 Table 至少会从磁盘读取并持有 Footer 和 IndexBlock。
+ * 查找一个 key 是否存在的时候只要查找IndexBlock就行了。
+ * Open 一个 Table 不会读取 DataBlock
+ * */
 Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,
@@ -83,6 +93,7 @@ Status Table::Open(const Options& options,
   return s;
 }
 
+//从文件读取 metaIndexBlock，再读取 MateBlock(只有一个 FilterBlock)
 void Table::ReadMeta(const Footer& footer) {
   if (rep_->options.filter_policy == nullptr) {
     return;  // Do not need any metadata
@@ -95,6 +106,7 @@ void Table::ReadMeta(const Footer& footer) {
     opt.verify_checksums = true;
   }
   BlockContents contents;
+  // 读取metaindex block，构造迭代器用于寻找 filter block
   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
     // Do not propagate errors since meta info is not needed for operation
     return;
@@ -104,14 +116,17 @@ void Table::ReadMeta(const Footer& footer) {
   Iterator* iter = meta->NewIterator(BytewiseComparator());
   std::string key = "filter.";
   key.append(rep_->options.filter_policy->Name());
+  // 读取metaindex block 中的 filter的地址
   iter->Seek(key);
   if (iter->Valid() && iter->key() == Slice(key)) {
+    //从文件读取 filter
     ReadFilter(iter->value());
   }
   delete iter;
   delete meta;
 }
 
+//从文件读取 filter
 void Table::ReadFilter(const Slice& filter_handle_value) {
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
@@ -156,6 +171,7 @@ static void ReleaseBlock(void* arg, void* h) {
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
+// 读取index_value表示的BlockHandle指向的 block，并生成它的迭代器
 Iterator* Table::BlockReader(void* arg,
                              const ReadOptions& options,
                              const Slice& index_value) {
@@ -173,6 +189,7 @@ Iterator* Table::BlockReader(void* arg,
   if (s.ok()) {
     BlockContents contents;
     if (block_cache != nullptr) {
+      // 一个 block 的 cache_key={cache_id}{block offset}
       char cache_key_buffer[16];
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
       EncodeFixed64(cache_key_buffer+8, handle.offset());
@@ -218,6 +235,8 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
+//从index_block入手寻找 k，找到的话读取 Block 和 Block 中的对应的 v，并调用saver(k,v)
+//如果过滤器说没有这个 k，则不会读取 block
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {

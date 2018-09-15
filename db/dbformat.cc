@@ -47,6 +47,7 @@ const char* InternalKeyComparator::Name() const {
   return "leveldb.InternalKeyComparator";
 }
 
+// 当升序排列的时候，user_key 一样的时候，sequence number 大的在前
 int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   // Order by:
   //    increasing user key (according to user-supplied comparator)

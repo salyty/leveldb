@@ -24,6 +24,17 @@ class BlockBuilder;
 class BlockHandle;
 class WritableFile;
 
+/*
+ * 1，构造TableBuilder，生成第一个 data_block，filter_block、index_block
+ * 2，调用Add(key,value)往当前 data_block 添加数据， 同时更新 filter_block
+ * 3，当当前data_block大小超过阈值的时候，flush data_block到文件，然后在
+ * index_block中添加该data_block对应的entry，key 为DataBlock 的 key 的最大可能值。
+ * value 为DataBlock的BlockHandle
+ * 4，调用 Finish(),依次写filter_block/meta_index_block/index_block/footer,
+ * 具体步骤见Finish()实现的内部注释
+ */
+
+
 class LEVELDB_EXPORT TableBuilder {
  public:
   // Create a builder that will store the contents of the table it is

@@ -45,6 +45,7 @@ Status Writer::AddRecord(const Slice& slice) {
   do {
     const int leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
+    // 如果当前 block 连 Header 都不够填充，则用空白填充剩余的 block 空间，直到下一个 block 起始处
     if (leftover < kHeaderSize) {
       // Switch to a new block
       if (leftover > 0) {
@@ -63,6 +64,7 @@ Status Writer::AddRecord(const Slice& slice) {
 
     RecordType type;
     const bool end = (left == fragment_length);
+    // 如果数据包含起始和结束，则是整个数据块
     if (begin && end) {
       type = kFullType;
     } else if (begin) {
@@ -81,19 +83,23 @@ Status Writer::AddRecord(const Slice& slice) {
   return s;
 }
 
+// 一条 record 内容： {4 bytes crc}{2 bytes Lenght}{1 byte type}
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   assert(n <= 0xffff);  // Must fit in two bytes
   assert(block_offset_ + kHeaderSize + n <= kBlockSize);
 
   // Format the header
   char buf[kHeaderSize];
+  // 2个字节长度
   buf[4] = static_cast<char>(n & 0xff);
   buf[5] = static_cast<char>(n >> 8);
+  // 1个字节 type
   buf[6] = static_cast<char>(t);
 
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, n);
   crc = crc32c::Mask(crc);                 // Adjust for storage
+  // 4个字节 crc
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload

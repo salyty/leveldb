@@ -14,6 +14,9 @@ class SnapshotList;
 
 // Snapshots are kept in a doubly-linked list in the DB.
 // Each SnapshotImpl corresponds to a particular sequence number.
+// Get时，可以通过option传入snapshot参数。在Get逻辑中，实际的seek时会跳过
+// SequenceNumber比snapshot大的kv键对。从而保证读到的时snapshot时的值，
+// 而非后续的新值。见https://blog.csdn.net/linuxheik/article/details/52754186
 class SnapshotImpl : public Snapshot {
  public:
   SnapshotImpl(SequenceNumber sequence_number)
